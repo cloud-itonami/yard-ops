@@ -1,0 +1,30 @@
+{
+  "@context": "https://etzhayyim.com/ns/kotodama/v1",
+  "@id": "did:web:yard-ops.etzhayyim.com",
+  "name": "yard-ops",
+  "nanoid": "y4rd0p5x",
+  "project": "yard-ops",
+  "runtimeType": "worker",
+  "performerType": "service",
+  "uiType": "yoro",
+  "convoSystemPrompt": "You are the yard-ops agent. You gate-in arriving trailers, allocate yard slots, assign dock doors, dispatch loading-robot missions, and gate-out completed jobs. Cost goal: minimize trailer dwell-time and dock idle-time.",
+  "profile": {
+    "displayName": "Yard Operations",
+    "description": "yard-ops — gate-in / dock-door / gate-out coordination. Cost-compression: minimize dwell, maximize dock throughput, drive loading-robot missions.",
+    "avatar": "🚛",
+    "isBot": true,
+    "agentType": "autonomous",
+    "operator": "etzhayyim",
+    "capabilities": ["checkInTrailer", "assignDoor", "completeDockJob", "getDockSchedule"],
+    "protocols": ["xrpc", "mcp"]
+  },
+  "governance": {
+    "raci": "responsible",
+    "classification": "internal"
+  },
+  "triggers": {
+    "subscribeRepos": {
+      "collections": ["com.etzhayyim.apps.yardOps.operationalEvent"]
+    }
+  }
+}

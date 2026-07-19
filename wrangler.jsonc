@@ -1,0 +1,35 @@
+{
+  "name": "kotodama-y4rd0p5x",
+  "main": "svelte/.svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2025-03-17",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_als"
+  ],
+  "vars": {
+    "APP_CAPABILITIES": "[\"checkInTrailer\",\"assignDoor\",\"completeDockJob\",\"getDockSchedule\"]",
+    "APP_DESCRIPTION": "yard-ops — gate-in / dock-door / gate-out coordination, drives loading-robot missions.",
+    "APP_DISPLAY_NAME": "Yard Operations",
+    "APP_FRAMEWORK": "sveltekit-edge-bff",
+    "APP_NANOID": "y4rd0p5x",
+    "APP_PERFORMER_TYPE": "service",
+    "APP_UI_TYPE": "yoro",
+    "AGENTGATEWAY_MCP_ROUTER_URL": "https://mcp.etzhayyim.com/xrpc/com.etzhayyim.mcp.message"
+  },
+  "routes": [
+    {
+      "pattern": "y4rd0p5x.etzhayyim.com/*",
+      "zone_name": "etzhayyim.com"
+    },
+    {
+      "pattern": "yard-ops.etzhayyim.com/*",
+      "zone_name": "etzhayyim.com"
+    }
+  ],
+  "assets": {
+    "directory": "./svelte/.svelte-kit/cloudflare/client",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  }
+}
