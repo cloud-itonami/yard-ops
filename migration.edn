@@ -1,4 +1,4 @@
 {:schema "etzhayyim.migration/v1"
  :source {:repository "etzhayyim/root" :revision "c9e7df4b327a3ee7b5ed25fb3480db45553c33ed" :path "60-apps/etzhayyim-project-yard-ops" :tree "455915c034d254e7e4b9c4dccfd9294203bad796" :tracked-files 12 :bytes 13299}
  :destination {:repository "etzhayyim/com-etzhayyim-app-yard-ops"}
- :identity {:allowed-additions ["README.edn" "migration.edn"]}}
+ :identity {:allowed-additions ["README.edn" "migration.edn" "run_tests.cljs" "test"]}}
