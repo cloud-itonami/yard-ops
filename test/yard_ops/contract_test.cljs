@@ -7,34 +7,59 @@
   言っている**という合意である:
 
     src/app.ts                          thin edge（health probe・NSID 転送・内部秘密）
-    svelte/src/routes/xrpc/[...path]/   実際に配備される XRPC 面（MCP router 転送）
-    svelte/src/routes/+page.svelte      配備される landing page（自己記述を持つ）
-    wrangler.jsonc                      配備（name / main / routes / vars / assets）
-    kotodama.jsonld                     actor identity（DID / nanoid / capabilities）
-    package.json / svelte/package.json  名前
-    README.edn                          repo の名乗り
-    migration.edn                       抽出元と、抽出後に足してよいものの宣言
-    NOTICE                              配布条件
+    src/xrpc-agentgateway-proxy.ts       保存された旧 XRPC 面（MCP router 転送。配線されていない）
+    cljs/src/yard_ops/app.cljs           landing page（reagent + re-frame + jp-go-dds、自己記述を持つ）
+    wrangler.jsonc                       配備（name / routes / vars / assets。main は無い）
+    kotodama.jsonld                      actor identity（DID / nanoid / capabilities）
+    package.json / cljs/package.json     名前
+    README.edn                           repo の名乗り
+    migration.edn                        wave 1（etzhayyim/root からの抽出）の宣言。wave 2 は動かさない
+    NOTICE                               配布条件
 
   どの面も他を import していないので、片方だけ動いた drift は throw しない
   —— identity 文書と worker が別の nanoid を名乗っても配備は成功し、
   did:web の解決や route の逆引きが空振りして初めて分かる。
 
-  ## 配備されるのは src/app.ts ではない（2026-08-26 実測）
+  ## 2026-09-07: Svelte → ClojureScript 移行（wave 2）
 
-  `wrangler.main` は SvelteKit の build 出力を指しており、`src/app.ts` は
-  **配備の実行経路に入っていない**。しかも 2 つの面は信頼モデルも上流も
-  methods も違う:
+  この repo のフロントエンドは SvelteKit（`svelte/`）から reagent + re-frame +
+  jp-go-dds（`cljs/`）へ移行した。backend TypeScript（`src/app.ts`）は無改造。
+  `svelte/` は 7 ファイルとも削除済み。
 
-    | | src/app.ts（配備されない） | +server.ts（配備される） |
+  移行前は `wrangler.main` が SvelteKit の Cloudflare adapter build を指し、
+  その build が `svelte/src/routes/+page.svelte`（landing page）と
+  `svelte/src/routes/xrpc/[...path]/+server.ts`（XRPC proxy）の両方を
+  1 つの worker にまとめて配備していた。移行後は `wrangler.jsonc` に
+  `main` が無く、**静的 assets（`cljs/public`）だけが配備される** ——
+  landing page は `cljs/src/yard_ops/app.cljs` として配備されるが、
+  XRPC proxy は body 無改造のまま `src/xrpc-agentgateway-proxy.ts` へ
+  移設されただけで、**どこからも参照されておらず配線されていない**
+  （`@sveltejs/kit` に依存しているので今のままでは動かせない。再配線は
+  この移行のスコープ外の製品判断）。
+
+  `migration.edn` は wave 1（`etzhayyim/root` からの最初の抽出、12 ファイル）
+  だけを記述する別の provenance イベントなので、この移行では書き換えない
+  —— 書き換えると `:source` の revision/tree/bytes が指す実際の抽出内容と
+  ずれる。wave 2 が足したファイル（`cljs/**` と
+  `src/xrpc-agentgateway-proxy.ts`）は下の `wave-2-migration-additions` に
+  この test ファイル側で宣言する。
+
+  ## 配備されるのは src/app.ts ではない（2026-08-26 実測、2026-09-07 更新）
+
+  `src/app.ts` は今も**配備の実行経路に入っていない**。`main` 自体が無く
+  なったので、`src/app.ts` と `src/xrpc-agentgateway-proxy.ts` はどちらも
+  配備されない、という点では同じになった。ただし信頼モデル・上流・methods
+  の違いは記録として残す価値があるので、保存された旧 XRPC 面についての
+  `deployed-*` 群は引き続きその body の性質（trust 委譲・allowlist 不在・
+  method 面）を pin する —— 動いていた頃の契約を、動かなくなった今も
+  デグレさせずに保つため:
+
+    | | src/app.ts（配備されない） | src/xrpc-agentgateway-proxy.ts（配備されない） |
     |---|---|---|
     | 上流 | dispatcher.etzhayyim.com | mcp.etzhayyim.com（MCP router） |
     | NSID | `com.etzhayyim.apps.yardOps.` だけ通す | **allowlist 無し。任意の path を転送** |
     | 認証 | 自分で `x-internal-secret` を付ける | 呼び手の header をそのまま委譲 |
     | method | POST と GET | **POST と OPTIONS のみ（GET は無い）** |
-
-  下の `deployed-*` 群は後者を pin する —— thin edge の guard を検査した緑を、
-  配備面の安全性の証拠として読ませないためである。
 
   ## 抽出の床
 
@@ -63,8 +88,7 @@
                       {:path path :what what}))))
 
 (defn- json-file
-  "JSON を読む。wrangler.jsonc は今日コメントを持たないが、将来 `//` 行が
-  入っても『読めなかった』が『合意している』に化けないよう、行頭コメントだけ
+  "JSON を読む。wrangler.jsonc は今日コメントを持つので、行頭コメントだけ
   落としてから parse する（行内 `//` は URL を壊すので触らない）。"
   [path]
   (let [raw (slurp-file path)
@@ -101,8 +125,8 @@
 ;; ─── 面 ────────────────────────────────────────────────────────────────
 
 (def edge-path "src/app.ts")
-(def deployed-path "svelte/src/routes/xrpc/[...path]/+server.ts")
-(def page-path "svelte/src/routes/+page.svelte")
+(def deployed-path "src/xrpc-agentgateway-proxy.ts")
+(def page-path "cljs/src/yard_ops/app.cljs")
 (def wrangler-path "wrangler.jsonc")
 (def kotodama-path "kotodama.jsonld")
 
@@ -112,7 +136,7 @@
 (def wrangler (json-file wrangler-path))
 (def kotodama (json-file kotodama-path))
 (def pkg (json-file "package.json"))
-(def svelte-pkg (json-file "svelte/package.json"))
+(def cljs-pkg (json-file "cljs/package.json"))
 (def readme (edn-file "README.edn"))
 (def migration (edn-file "migration.edn"))
 
@@ -134,10 +158,16 @@
            vec)))
 
 (def page-self
-  "landing page が自分について言っていること（`const app = {...};`）。"
-  (-> (extract-1 page #"(?s)const app = (\{.*?\});" page-path "const app")
-      js/JSON.parse
-      (js->clj :keywordize-keys false)))
+  "landing page が自分について言っていること（`(def default-db {...})`）。
+  移行前は svelte の `const app = {...};`（JSON-shaped の JS object リテラル）
+  を JSON.parse で読んでいた。cljs 版は同じ内容を EDN map リテラルとして持つ
+  ので、JSON.parse ではなく EDN reader（`cljs.reader/read-string`）で読み、
+  キーは（JS 文字列キーではなく）keyword になる — :route-count / :xrpc? /
+  :relative-path 等、page.cljs 側の語彙と同じ。default-db は入れ子の map を
+  持たない（値は文字列・数値・真偽値・文字列 vector のみ）ので、非貪欲な
+  `\\{.*?\\}` で安全に囲みを取れる。"
+  (-> (extract-1 page #"(?s)\(def default-db\s*(\{.*?\})\)" page-path "default-db")
+      reader/read-string))
 
 ;; ─── actor identity ────────────────────────────────────────────────────
 
@@ -200,23 +230,39 @@
                   (apply str h (map str/capitalize t)))]
       (is (= (str "com.etzhayyim.apps." camel ".") nsid-prefix)))))
 
-;; ─── 配備される面（thin edge ではない） ────────────────────────────────
+;; ─── 保存された旧 XRPC 面（配備されていない） ──────────────────────────
 
-(deftest deployed-entrypoint-is-the-sveltekit-build-not-the-thin-edge
-  (testing "wrangler.main は SvelteKit の build 出力を指す"
-    (is (= "svelte/.svelte-kit/cloudflare/_worker.js" (get wrangler "main"))))
+(deftest deployed-surface-is-static-assets-only-no-backend-entrypoint
+  (testing "wrangler は main を持たない（静的 assets だけを配信する）"
+    (is (not (contains? (set (keys wrangler)) "main"))))
+  (testing "assets.directory が cljs のビルド出力を指す"
+    (is (= "./cljs/public" (get-in wrangler ["assets" "directory"]))))
   (testing "src/app.ts は配備 config のどこからも参照されていない"
-    ;; 参照されるようになったら、下の deployed-* 群が守っている主張
-    ;; （信頼委譲・method 面・allowlist 不在）が配備の実態と食い違い始める。
     (is (not (str/includes? (slurp-file wrangler-path) "src/app.ts"))))
-  (testing "framework var と、配備面が押す BFF header が同じことを言う"
-    (is (= (get wrangler-vars "APP_FRAMEWORK")
-           (extract-1 deployed #"'x-etzhayyim-bff',\s*'([^']+)'" deployed-path "bff header")))))
+  (testing "保存された旧 XRPC 面も配備 config から参照されていない（配線されていない）"
+    (is (not (str/includes? (slurp-file wrangler-path) "xrpc-agentgateway-proxy"))))
+  (testing "framework var は新しい frontend framework を名乗り、保存された旧 backend が押す BFF header とはもう一致しない"
+    ;; 移行前はこの2つが同じ値（sveltekit-edge-bff）で、SvelteKit が両方を
+    ;; サーブしていたことの証拠だった。移行後は frontend framework だけが
+    ;; 変わり、保存された（配線されていない）backend の自己申告はそのまま
+    ;; body 無改造で残る —— 一致しないことが正しい新しい現実である。
+    (let [bff-header (extract-1 deployed #"'x-etzhayyim-bff',\s*'([^']+)'" deployed-path "bff header")]
+      (is (= "cljs-reagent-re-frame-jp-go-dds" (get wrangler-vars "APP_FRAMEWORK")))
+      (is (= "sveltekit-edge-bff" bff-header))
+      (is (not= (get wrangler-vars "APP_FRAMEWORK") bff-header)
+          "framework var と保存された BFF header が一致してしまった —— どちらかが黙って揃えられた"))))
+
+(deftest preserved-backend-file-carries-its-provenance-marker
+  (testing "先頭行が保存マーカーである"
+    (is (str/starts-with? deployed "// SVELTEKIT-BACKEND-PRESERVED: moved out of svelte/ during the cljs migration; not wired."))))
 
 (deftest deployed-xrpc-face-delegates-trust-and-has-no-nsid-allowlist
+  ;; この deftest 名は移行前からの継続 —— 中身（trust 委譲・allowlist 不在・
+  ;; method 面）は body 無改造で保存されているので、これらの assertion は
+  ;; 全部そのまま成立する。ただし今はもう「配備される面」ではない
+  ;; （上の deployed-surface-is-static-assets-only-no-backend-entrypoint を見よ）。
   (testing "POST と OPTIONS だけを export し、GET は無い"
     ;; thin edge は GET を受けるので、2 面は method 面で食い違う。
-    ;; 本番へ GET すると 405、thin edge なら 200 —— これは仕様差である。
     (is (re-find #"export const POST" deployed))
     (is (re-find #"export const OPTIONS" deployed))
     (is (nil? (re-find #"export const GET" deployed))
@@ -307,18 +353,27 @@
 
 (deftest project-names-agree-across-surfaces
   (let [name* (get pkg "name")]
-    (testing "svelte の package は同じ名前に -svelte を足したもの"
-      (is (= (str name* "-svelte") (get svelte-pkg "name"))))
+    (testing "cljs の package は同じ名前に -cljs を足したもの"
+      (is (= (str name* "-cljs") (get cljs-pkg "name"))))
     (testing "抽出元 path の leaf が package 名"
       (is (= name* (last (str/split (get-in migration [:source :path]) #"/")))))
     (testing "README の名乗りが移設先 repo の leaf"
       (is (= (:name readme) (last (str/split (get-in migration [:destination :repository]) #"/")))))
     (testing "landing page の自己記述が package 名と一致する"
-      (is (= name* (get page-self "name")))
-      (is (= name* (get page-self "project"))))
-    (testing "landing page が名乗る source path が抽出元 path の下にある"
-      (is (str/starts-with? (get page-self "relativePath")
-                            (str (get-in migration [:source :path]) "/"))))))
+      (is (= name* (:name page-self)))
+      (is (= name* (:project page-self))))
+    (testing "landing page が名乗る source path は自分自身への repo-relative path である"
+      ;; wave 1（svelte 時代）は relativePath が抽出元の絶対パス
+      ;; （60-apps/etzhayyim-project-yard-ops/svelte/...）を自己記述として
+      ;; 持っていた。wave 2（cljs）はもう抽出直後の repo ではないので、
+      ;; :relative-path は「自分の実際のファイルパス」を指す（app-tia の
+      ;; 前例と同じ形）。抽出元の provenance は relative-path ではなく
+      ;; ns docstring に VERBATIM で残す（下のテストで pin する）。
+      (is (= "cljs/src/yard_ops/app.cljs" (:relative-path page-self))))
+    (testing "抽出元 svelte path が app.cljs の docstring に VERBATIM で残っている"
+      ;; :relative-path がもう抽出元を指さなくなった代わりに、provenance を
+      ;; 落とさないための pin。
+      (is (str/includes? page "60-apps/etzhayyim-project-yard-ops/svelte/src/routes/+page.svelte")))))
 
 (deftest display-metadata-agrees-between-wrangler-and-identity
   (testing "表示名"
@@ -335,53 +390,81 @@
       (is (str/starts-with? (get wrangler-vars "APP_DESCRIPTION") shared))
       (is (str/starts-with? (get kotodama-profile "description") shared)))))
 
-;; ─── 配備される landing page は空の自己記述を出している（既知） ────────
+;; ─── 配備される landing page は今、実際の route/var を出している（直った） ──
 
-(deftest known-empty-landing-page-summary-is-still-empty
-  ;; wrangler は route を 2 本、var を 8 個宣言しているのに、配備される
-  ;; landing page は routeCount 0 / routes [] / vars [] を表示する。
-  ;; **直った日にここが赤くなる** —— 既知の欠陥が黙って残り続けるのと、
-  ;; 直ったのに記録が古いままなのを、出力で区別するため。
+(deftest landing-page-summary-now-reflects-real-routes-and-vars
+  ;; 旧テスト `known-empty-landing-page-summary-is-still-empty` は、配備される
+  ;; landing page が routeCount 0 / routes [] / vars [] という stale な空
+  ;; literal を表示し続けていることを pin していた。その docstring 自身が
+  ;; 「直った日にここが赤くなる —— 直ったのに記録が古いままなのを区別する
+  ;; ため」と書いていたとおり、この cljs 移行で実際に直った
+  ;; （:routes / :vars を wrangler.jsonc から起こした）ので、ここでその
+  ;; 『直った』状態を新しく pin する。
   (testing "wrangler は実際に route と var を持っている"
     (is (= 2 (count (get wrangler "routes"))))
     (is (<= 8 (count wrangler-vars))))
-  (testing "landing page は今なお 0 件だと表示している"
-    (is (= 0 (get page-self "routeCount")))
-    (is (= [] (get page-self "routes")))
-    (is (= [] (get page-self "vars"))))
-  (testing "xrpc は enabled と表示され、実際に XRPC route が在る"
-    (is (true? (get page-self "xrpc")))
+  (testing "landing page の route-count が wrangler の route 数と一致する"
+    (is (= (count (get wrangler "routes")) (:route-count page-self))))
+  (testing "landing page の routes が wrangler の route pattern と一致する（順序込み）"
+    (is (= (mapv #(get % "pattern") (get wrangler "routes")) (:routes page-self))))
+  (testing "landing page の vars が wrangler の vars map の全キーを漏らさず含む"
+    (is (= (set (keys wrangler-vars)) (set (:vars page-self))))
+    (is (= (count wrangler-vars) (count (:vars page-self)))))
+  (testing "xrpc は enabled と表示され、保存された旧 XRPC 面（配線されていないが）実在する"
+    (is (true? (:xrpc? page-self)))
     (is (fs/existsSync deployed-path))))
 
-;; ─── 抽出の同一性 ──────────────────────────────────────────────────────
+;; ─── wave 2（svelte→cljs）が足したファイル ──────────────────────────
+
+(def wave-2-migration-additions
+  "svelte→cljs 移行（2026-09-07、wave 2）がこの commit で足したファイルの
+  prefix 宣言。migration.edn は wave 1（etzhayyim/root からの最初の抽出）
+  だけを記述する別の provenance イベントなので書き換えない —— 書き換えると
+  :source の revision/tree/bytes が指す実際の抽出内容とずれる。ここは
+  wave 1 の allowed-additions と同じ役割を、この test ファイル自身が
+  wave 2 について宣言する場所。"
+  #{"cljs" "src/xrpc-agentgateway-proxy.ts"})
+
+(defn- wave-2-addition? [f]
+  (some #(or (= f %) (str/starts-with? f (str % "/"))) wave-2-migration-additions))
 
 (defn- head-originals
-  "HEAD のファイルのうち、宣言された追加物でないもの = 抽出物。"
+  "HEAD のファイルのうち、宣言された追加物（wave 1: migration.edn の
+  :identity :allowed-additions、wave 2: この test ファイルの
+  wave-2-migration-additions）でないもの = wave-1 抽出物のうちまだ
+  残っているもの。svelte→cljs 移行で svelte/ の 7 ファイルが消えたので、
+  wave-1 originals は 12 から 5 に減った。"
   []
-  (let [additions (set (get-in migration [:identity :allowed-additions]))
-        added? (fn [f] (some #(or (= f %) (str/starts-with? f (str % "/"))) additions))]
-    (remove added? (head-files))))
+  (let [wave1-additions (set (get-in migration [:identity :allowed-additions]))
+        wave1-added? (fn [f] (some #(or (= f %) (str/starts-with? f (str % "/"))) wave1-additions))]
+    (remove #(or (wave1-added? %) (wave-2-addition? %)) (head-files))))
 
 (deftest migration-file-set-still-matches-the-extraction
-  ;; migration.edn は「この repo は抽出した N ファイル + 宣言した追加物だけ」と
-  ;; 主張している。それを誰も検査していなかったので、ここで検査する。
+  ;; migration.edn は wave 1（etzhayyim/root からの抽出、12 ファイル）を
+  ;; 記述する。svelte→cljs 移行（wave 2）は元の抽出のうち svelte/ の
+  ;; 7 ファイルを削除したので、残る wave-1 originals は 12 - 7 = 5
+  ;; （NOTICE / kotodama.jsonld / package.json / wrangler.jsonc / src/app.ts）。
   (let [originals (head-originals)]
-    (testing "追加物の宣言に載っていないファイルの数が :tracked-files と一致する"
-      (is (= (get-in migration [:source :tracked-files]) (count originals))
-          (str "抽出物: " (pr-str (vec (sort originals))))))
-    (testing "宣言された追加物は全て実在する（消えた宣言を残さない）"
+    (testing "wave-2 で svelte/ の 7 ファイルが削除され、残る wave-1 originals は 5"
+      (is (= 5 (count originals))
+          (str "抽出物のうち残っているもの: " (pr-str (vec (sort originals))))))
+    (testing "宣言された wave-1 追加物は全て実在する（消えた宣言を残さない）"
       (doseq [a (get-in migration [:identity :allowed-additions])]
         (is (fs/existsSync a) (str "宣言された追加物が無い: " a))))
+    (testing "宣言された wave-2 追加物も全て実在する"
+      (doseq [a (sort wave-2-migration-additions)]
+        (is (fs/existsSync a) (str "宣言された wave-2 追加物が無い: " a))))
     (testing "抽出元の revision と tree が 40 桁の sha で固定されている"
       (is (re-matches #"[0-9a-f]{40}" (get-in migration [:source :revision])))
       (is (re-matches #"[0-9a-f]{40}" (get-in migration [:source :tree]))))))
 
 (deftest migration-byte-total-still-matches-the-extraction
-  ;; 抽出物を 1 バイトでも commit で変えたら、provenance の記録が嘘になる。
-  ;; **記録を更新させるための赤**であって、編集を禁じるためのものではない。
-  (testing "抽出物の合計バイト数が :bytes と一致する"
-    (is (= (get-in migration [:source :bytes])
-           (reduce + 0 (map head-size (head-originals)))))))
+  ;; wave 2 で svelte/ が削除され、残る 5 originals のうち wrangler.jsonc の
+  ;; 内容も変わった（main 除去・framework var・assets.directory）ので、元の
+  ;; :bytes（13299、wave-1 の 12 originals 全部）はもう成立しない。ここでは
+  ;; 残る 5 originals の、この移行 commit 時点での合計バイト数を pin する。
+  (testing "残る wave-1 originals の合計バイト数"
+    (is (= 6402 (reduce + 0 (map head-size (head-originals)))))))
 
 (deftest repository-declares-itself-as-an-edn-first-app
   (testing "README.edn が kind と canonical-metadata を宣言する"
