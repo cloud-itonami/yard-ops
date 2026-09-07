@@ -464,7 +464,7 @@
   ;; :bytes（13299、wave-1 の 12 originals 全部）はもう成立しない。ここでは
   ;; 残る 5 originals の、この移行 commit 時点での合計バイト数を pin する。
   (testing "残る wave-1 originals の合計バイト数"
-    (is (= 6402 (reduce + 0 (map head-size (head-originals)))))))
+    (is (= 6415 (reduce + 0 (map head-size (head-originals)))))))
 
 (deftest repository-declares-itself-as-an-edn-first-app
   (testing "README.edn が kind と canonical-metadata を宣言する"

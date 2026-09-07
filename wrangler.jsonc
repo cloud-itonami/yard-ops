@@ -3,7 +3,7 @@
   // "main" dropped: it pointed at the SvelteKit Cloudflare adapter's build
   // output (svelte/.svelte-kit/cloudflare/_worker.js), which no longer
   // exists after the Svelte → ClojureScript frontend migration (see
-  // ./cljs/). "src/app.ts" (the documented dispatcher Worker) was
+  // ./cljs/). The other, documented dispatcher Worker (app.ts, under src/) was
   // considered as a replacement but does not call `env.ASSETS.fetch()`, so
   // pointing `main` at it would put a worker in front of the static assets
   // with nothing serving them. Frontend is served as plain static assets
