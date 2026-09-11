@@ -1,7 +1,7 @@
-#!/usr/bin/env nbb
+#!/usr/bin/env kbb
 ;; run_tests.cljs — yard-ops の面契約検査。
 ;;
-;;   nbb --classpath test run_tests.cljs
+;;   kbb --backend sci --classpath test run_tests.cljs
 ;;
 ;; yard-ops は state-less な edge BFF で、実際の計算は AgentGateway MCP と
 ;; pod 側の LangServer に居る。この repo の実体は『複数の面が同じ actor・同じ
